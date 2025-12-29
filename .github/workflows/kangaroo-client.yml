@@ -1,0 +1,53 @@
+name: Kangaroo Solver Client
+
+on:
+  workflow_dispatch:
+    inputs:
+      server_ip:
+        description: 'IP Address of the VPS Server'
+        required: true
+      threads:
+        description: 'Number of threads (leave empty for auto max)'
+        required: false
+        default: '2'
+
+jobs:
+  solve:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # Run 20 parallel jobs (20 clients)
+        worker_id: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Install Dependencies
+      run: sudo apt-get update && sudo apt-get install -y build-essential
+
+    - name: Clone Repository
+      run: git clone https://github.com/mikorist/Kangaroo-256-bit.git kangaroo
+
+    - name: Patch Code (Fix bind conflict and missing headers)
+      run: |
+        cd kangaroo
+        sed -i 's/if(bind(serverSock/if(::bind(serverSock/g' Network.cpp
+        sed -i '1i#include <cstdint>' Timer.h
+
+    - name: Compile
+      run: |
+        cd kangaroo
+        make cpu=1
+
+    - name: Connect to Server and Solve
+      run: |
+        cd kangaroo
+        # Use provided threads or default to 2 (GHA standard)
+        THREADS="${{ github.event.inputs.threads }}"
+        # Use IP from Secret to hide it from logs
+        SERVER="${{ secrets.KANGAROO_SERVER_IP }}"
+        echo "Connecting to Server... (IP Hidden)"
+        
+        # Run indefinitely (until 6h timeout)
+        ./kangaroo-256 -c $SERVER -sp 8080 -t $THREADS
